@@ -1,0 +1,39 @@
+# Данные (тяжёлые, не коммитим)
+data/raw/
+data/processed/
+
+# Сабмиты (тяжёлые)
+submissions/*.parquet
+
+# Baseline модель
+baseline/sample_submit.parquet
+
+# Окружение
+.venv/
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Секреты
+.env
+*.key
+
+# Скриншоты
+*.png
+
+# Claude
+.claude/
+
+# CatBoost logs
+catboost_info/
+**/catboost_info/
