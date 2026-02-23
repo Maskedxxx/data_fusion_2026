@@ -11,6 +11,13 @@
 
 ---
 
+## EXP-003 | 2026-02-21 | CatBoost 1000 iter + extra features
+- Описание: подключили extra_features (2241 доп. числовых признака), объединили с main по customer_id
+- Параметры: CatBoost, iterations=1000, depth=6, lr=0.1, MultiLogloss, GPU, early_stopping=100
+- Фичи: main + extra (2440 признаков)
+- Local CV: 0.8282 | **Public LB: 0.8349**
+- Вывод: extra фичи дали +0.013 на LB. Early stopping снова не сработал — модель ещё растёт, нужно больше итераций.
+
 ## EXP-002 | 2026-02-21 | CatBoost 1000 iter + валидация
 - Описание: увеличили итерации, добавили val split 80/20, depth=6
 - Параметры: CatBoost, iterations=1000, depth=6, lr=0.1, MultiLogloss, GPU, early_stopping=100
