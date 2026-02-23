@@ -11,6 +11,13 @@
 
 ---
 
+## EXP-005 | 2026-02-23 | Feature Engineering (null_count, num_mean, num_std, cat_freq)
+- Описание: добавили 70 новых признаков — кол-во пропусков, статистики числовых, частоты категориальных
+- Параметры: CatBoost, iterations=3000, depth=6, lr=0.05, MultiLogloss, GPU
+- Фичи: main + extra + FE (2511 признаков)
+- Local CV: 0.8311 | Public LB: не загружали
+- Вывод: **фичи не помогли** (-0.0003 к val). CatBoost и так обрабатывает пропуски и категории нативно. Размытые агрегаты (mean/std по всем столбцам) не несут полезного сигнала. Откат к данным без FE.
+
 ## EXP-004 | 2026-02-23 | CatBoost lr=0.05, 3000 iter
 - Описание: снизили lr с 0.1 до 0.05, увеличили итерации до 3000
 - Параметры: CatBoost, iterations=3000, depth=6, lr=0.05, MultiLogloss, GPU, early_stopping=100
