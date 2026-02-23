@@ -11,6 +11,13 @@
 
 ---
 
+## EXP-004 | 2026-02-23 | CatBoost lr=0.05, 3000 iter
+- Описание: снизили lr с 0.1 до 0.05, увеличили итерации до 3000
+- Параметры: CatBoost, iterations=3000, depth=6, lr=0.05, MultiLogloss, GPU, early_stopping=100
+- Фичи: main + extra (2440 признаков)
+- Local CV: 0.8314 | **Public LB: 0.8391**
+- Вывод: +0.004 к LB. Early stopping снова не сработал (best=2999), но прирост замедлился. Потолок гиперпараметров близок, пора переходить к feature engineering / 41 отдельная модель.
+
 ## EXP-003 | 2026-02-21 | CatBoost 1000 iter + extra features
 - Описание: подключили extra_features (2241 доп. числовых признака), объединили с main по customer_id
 - Параметры: CatBoost, iterations=1000, depth=6, lr=0.1, MultiLogloss, GPU, early_stopping=100
