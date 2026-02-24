@@ -37,3 +37,6 @@ Thumbs.db
 # CatBoost logs
 catboost_info/
 **/catboost_info/
+
+# Логи обучения
+logs/
