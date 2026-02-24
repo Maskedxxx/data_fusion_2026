@@ -11,6 +11,13 @@
 
 ---
 
+## EXP-009b | 2026-02-24 | PyTorch MLP бленд со стекингом
+- Описание: обучили PyTorch MLP (Embedding + BatchNorm + SiLU, 512→256→41) на 100k, 15 эпох с early stopping. Сгенерировали OOF через 5-fold. Блендили с XGBoost стекингом.
+- Параметры: lr=0.003, AdamW, ReduceLROnPlateau, batch=1024, dropout=0.3/0.2
+- Скрипты: step6 (тест), step7 (OOF), step8 (стекинг v2), step8_weighted (бленд)
+- Public LB: **0.8432** (blend XGB+NN) / **0.8427** (weighted) — **оба хуже 0.8444**
+- Вывод: NN на 100k/15 эпох слишком слабая, ухудшает бленд. Нужно 750k + больше эпох, либо отложить PyTorch до более зрелого пайплайна.
+
 ## EXP-009 | 2026-02-24 | Стекинг (мета-модель на OOF предсказаниях)
 - Описание: двухуровневый пайплайн. Уровень 1: XGBoost 41 модель с 3-fold StratifiedKFold → OOF матрица (100k, 41). Уровень 2: мета-модель XGBoost (depth=2, 100 iter) предсказывает каждый таргет на основе 41 OOF-фичи
 - Параметры: L1 — XGBoost 200 iter, depth=6, lr=0.05, 3 фолда. L2 — XGBoost 100 iter, depth=2, lr=0.05, 5 фолдов
