@@ -4,6 +4,10 @@ data/processed/
 
 # Сабмиты (тяжёлые)
 submissions/*.parquet
+*.parquet
+
+# Модели PyTorch
+*.pth
 
 # Baseline модель
 baseline/sample_submit.parquet
