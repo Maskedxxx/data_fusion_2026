@@ -11,6 +11,54 @@
 
 ---
 
+## EXP-008 | 2026-02-24 | XGBoost + scale_pos_weight
+- Описание: XGBoost 41 модель с автоматическим scale_pos_weight для каждого таргета (компенсация дисбаланса классов)
+- Параметры: те же что EXP-007 + scale_pos_weight = n_neg/n_pos (от 2.2 до 9035)
+- Фичи: main + extra (2440 признаков)
+- Local CV: 0.8233 | Public LB: не загружали
+- Вывод: **не помогло** (-0.012 к EXP-007). ROC-AUC — ранговая метрика, scale_pos_weight ломает ранжирование. Модель переобучается на редких примерах, early stopping срабатывает на 100-300 итерациях вместо 400-1500. Дисбаланс для ROC-AUC нужно решать иначе: Focal Loss, per-target Optuna, стекинг.
+
+## EXP-007b | 2026-02-24 | XGBoost 41 модель — full train 750k (×1.2)
+- Описание: переобучение EXP-007 на полных 750k. Итерации = best_iter × 1.2
+- Параметры: те же что EXP-007, без early stopping, фиксированные итерации
+- Фичи: main + extra (2440 признаков)
+- Local CV: — | **Public LB: 0.8412** (лучший результат!)
+- Время: 44 мин на T4 GPU
+- Вывод: множитель ×1.2 консервативный, прирост всего +0.0003. Нужен ×2.0 с min 500 iter.
+
+## EXP-007 | 2026-02-23 | XGBoost 41 отдельная модель (GPU, Colab T4)
+- Описание: 41 отдельная бинарная модель XGBoost на GPU (T4). Обучение на 600k (80%), валидация 150k (20%)
+- Параметры: XGBoost, num_boost_round=3000, max_depth=6, lr=0.05, early_stopping=100, device=cuda, min_child_weight=5, subsample=0.8, colsample_bytree=0.8
+- Фичи: main + extra (2440 признаков)
+- Local CV: 0.8351 | **Public LB: 0.8409** (на 600k, без полного обучения!)
+- Время: 44 мин на T4 GPU
+- Вывод: **лучший одиночный фреймворк.** XGBoost 41 модель > CatBoost MultiLogloss (+0.0018). Доминирует на каждом таргете vs CatBoost и LightGBM.
+
+## EXP-006b | 2026-02-24 | CatBoost 41 модель — full train 750k (×1.3)
+- Описание: переобучение EXP-006 на полных 750k. Итерации = max(best_iter × 1.3, 1500). Запущен в tmux на Spark.
+- Параметры: CatBoost, depth=6, lr=0.05, GPU, Logloss, фиксированные итерации
+- Фичи: main + extra (2440 признаков)
+- Local CV: — | Public LB: ожидаем
+- Время: ~8-10ч, сейчас 28/41
+- Файлы: `src/exp006_full_train.py`, `submissions/exp006_cb_41models.parquet`
+- Вывод: в процессе
+
+## EXP-006 | 2026-02-23 | CatBoost 41 отдельная модель (GPU, Spark)
+- Описание: 41 отдельная бинарная модель CatBoost (Logloss вместо MultiLogloss). Валидация на 600k/150k
+- Параметры: CatBoost, iterations=3000, depth=6, lr=0.05, early_stopping=100, GPU, Logloss
+- Фичи: main + extra (2440 признаков)
+- Local CV: 0.8255 | Public LB: —
+- Время: 362 мин (~6ч)
+- Вывод: вторая по силе модель после XGBoost. Early stopping почти не срабатывал (~2999 итерация), модели недообучены — нужно больше итераций.
+
+## EXP-006-LGB | 2026-02-23 | LightGBM 41 отдельная модель (Colab CPU)
+- Описание: 41 бинарная модель LightGBM на Colab. pip LightGBM без GPU, работал на CPU
+- Параметры: LightGBM, num_boost_round=3000, num_leaves=63, lr=0.05, early_stopping=100, min_child_samples=5
+- Фичи: main + extra (2440 признаков)
+- Local CV: 0.7914 | Public LB: —
+- Время: ~80 мин
+- Вывод: **слабый результат.** target_2_8 = 0.434 (хуже рандома). LightGBM без GPU плохо работает с категориальными фичами и редкими классами. Для бленда полезен с малым весом.
+
 ## EXP-005 | 2026-02-23 | Feature Engineering (null_count, num_mean, num_std, cat_freq)
 - Описание: добавили 70 новых признаков — кол-во пропусков, статистики числовых, частоты категориальных
 - Параметры: CatBoost, iterations=3000, depth=6, lr=0.05, MultiLogloss, GPU
