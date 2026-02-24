@@ -11,6 +11,18 @@
 
 ---
 
+## EXP-009 | 2026-02-24 | Стекинг (мета-модель на OOF предсказаниях)
+- Описание: двухуровневый пайплайн. Уровень 1: XGBoost 41 модель с 3-fold StratifiedKFold → OOF матрица (100k, 41). Уровень 2: мета-модель XGBoost (depth=2, 100 iter) предсказывает каждый таргет на основе 41 OOF-фичи
+- Параметры: L1 — XGBoost 200 iter, depth=6, lr=0.05, 3 фолда. L2 — XGBoost 100 iter, depth=2, lr=0.05, 5 фолдов
+- Фичи: L1 — main + extra (2440). L2 — 41 OOF предсказание
+- Данные: 100k подвыборка (быстрый тест)
+- Quick test (100k): OOF 0.7977 → 0.8096 (+0.0120)
+- Full run (750k): OOF Macro AUC 0.8352, Meta-OOF AUC 0.8484
+- **Public LB: 0.8444** (лучший результат! +0.0032 к EXP-007b)
+- Per-target feature selection: 273-898 фичей на таргет (cumulative gain 95%)
+- L1: XGBoost 500 iter, 5-fold OOF (Colab T4, 118 мин). L2: XGBoost depth=2, 100 iter (Spark, 0.5 мин)
+- Вывод: **стекинг — главный прорыв.** Мета-модель учит корреляции между таргетами, слабые получают сигнал от частых. Следующий шаг: добавить CatBoost OOF (82 мета-фичи), хак if stack>base, увеличить iter L1.
+
 ## EXP-008 | 2026-02-24 | XGBoost + scale_pos_weight
 - Описание: XGBoost 41 модель с автоматическим scale_pos_weight для каждого таргета (компенсация дисбаланса классов)
 - Параметры: те же что EXP-007 + scale_pos_weight = n_neg/n_pos (от 2.2 до 9035)
@@ -35,13 +47,13 @@
 - Вывод: **лучший одиночный фреймворк.** XGBoost 41 модель > CatBoost MultiLogloss (+0.0018). Доминирует на каждом таргете vs CatBoost и LightGBM.
 
 ## EXP-006b | 2026-02-24 | CatBoost 41 модель — full train 750k (×1.3)
-- Описание: переобучение EXP-006 на полных 750k. Итерации = max(best_iter × 1.3, 1500). Запущен в tmux на Spark.
+- Описание: переобучение EXP-006 на полных 750k. Итерации = max(best_iter × 1.3, 1500)
 - Параметры: CatBoost, depth=6, lr=0.05, GPU, Logloss, фиксированные итерации
 - Фичи: main + extra (2440 признаков)
-- Local CV: — | Public LB: ожидаем
-- Время: ~8-10ч, сейчас 28/41
+- Local CV: — | **Public LB: 0.8327**
+- Время: 604 мин (~10ч) на Spark GPU
 - Файлы: `src/exp006_full_train.py`, `submissions/exp006_cb_41models.parquet`
-- Вывод: в процессе
+- Вывод: слабее XGBoost на 0.0085. Полезен для бленда (разные ошибки).
 
 ## EXP-006 | 2026-02-23 | CatBoost 41 отдельная модель (GPU, Spark)
 - Описание: 41 отдельная бинарная модель CatBoost (Logloss вместо MultiLogloss). Валидация на 600k/150k
