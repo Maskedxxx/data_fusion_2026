@@ -11,6 +11,14 @@
 
 ---
 
+## EXP-010 | 2026-02-25 | CatBoost OOF + стекинг 82 мета-фичи
+- Описание: добавили CatBoost OOF (750k, 5-fold, 500 iter) как второй L1. Мета-фичи: 41 XGB + 41 CB = 82. L2 тот же XGBoost depth=2, 100 iter.
+- Параметры: CatBoost depth=6, lr=0.05, GPU, Logloss, bootstrap=Bernoulli, subsample=0.8, border_count=64, early_stopping=50
+- Фичи L1: те же что у XGBoost (xgb_best_features.json) — переиспользовали отбор
+- Meta-AUC (train): 0.8501 (было 0.8484 с 41 фичей)
+- **Public LB: 0.8445** (было 0.8444, разница +0.00002 — по сути ноль)
+- Вывод: **CatBoost OOF не дал прироста.** Причина: использовали те же фичи что XGBoost → предсказания сильно коррелируют → мета-модель не получила нового сигнала. Для реального разнообразия нужен либо свой отбор фичей, либо принципиально другая модель.
+
 ## EXP-009b | 2026-02-24 | PyTorch MLP бленд со стекингом
 - Описание: обучили PyTorch MLP (Embedding + BatchNorm + SiLU, 512→256→41) на 100k, 15 эпох с early stopping. Сгенерировали OOF через 5-fold. Блендили с XGBoost стекингом.
 - Параметры: lr=0.003, AdamW, ReduceLROnPlateau, batch=1024, dropout=0.3/0.2
