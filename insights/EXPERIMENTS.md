@@ -11,6 +11,17 @@
 
 ---
 
+## EXP-012 | 2026-02-27 | PyTorch L2 бленд с XGBoost стекингом
+- Описание: обучили PyTorch Multi-Task NN как вторую L2 мета-модель на logit-трансформированных OOF (750k, 41). Архитектура: Linear(41→256)→BN→SiLU→Drop(0.3)→Linear(256→128)→BN→SiLU→Drop(0.2)→Linear(128→41). Бленд 60% XGBoost L2 + 40% PyTorch L2.
+- Параметры: AdamW lr=3e-3, weight_decay=1e-4, OneCycleLR max_lr=1e-2, batch=4096, 100 эпох
+- Вход: logit(OOF) = log(p/(1-p)) — нормализация распределения для NN
+- OOF PyTorch L2: 0.8382 | OOF бленд L1+L2_NN: 0.8449 (+0.0043 к L1)
+- **Public LB: 0.8505** (было 0.8472, **+0.0033**, новый рекорд!)
+- Ключевой инсайт: NN видит гладкие линейные комбинации (корреляции target_10_1, пакеты групп 3-7), которые деревья depth=2 аппроксимируют грубо
+- Артефакты: `nn_l2_oof.npy`, `submission_EXP012_nn_blend.parquet`
+- Время: 40 сек обучение на A100
+- Вывод: **разнообразие L2 моделей (деревья + NN) — новый прорыв.** До 0.86 осталось <0.01.
+
 ## EXP-011 | 2026-02-26 | Optuna per-target params + стекинг
 - Описание: применили per-target гиперпараметры из Optuna (100k, 3-fold, 20 trials) к EXP-009 пайплайну. Каждый из 41 таргетов получил свои depth, lr, colsample, mcw, reg_alpha, reg_lambda, n_rounds.
 - Параметры: индивидуальные из `optuna_best_params.json` (lr=0.01-0.02, colsample=0.3-0.9, mcw=1-20, n_rounds=500-1500)
