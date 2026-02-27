@@ -11,6 +11,31 @@
 
 ---
 
+## EXP-011 | 2026-02-26 | Optuna per-target params + стекинг
+- Описание: применили per-target гиперпараметры из Optuna (100k, 3-fold, 20 trials) к EXP-009 пайплайну. Каждый из 41 таргетов получил свои depth, lr, colsample, mcw, reg_alpha, reg_lambda, n_rounds.
+- Параметры: индивидуальные из `optuna_best_params.json` (lr=0.01-0.02, colsample=0.3-0.9, mcw=1-20, n_rounds=500-1500)
+- Фичи: per-target feature selection (cumulative gain 95%), 176-1243 фичей на таргет
+- Данные: 750k, 5-fold OOF → L2 XGBoost depth=2
+- L1 OOF Macro AUC: 0.8407 (было 0.8352 в EXP-009, **+0.0055**)
+- L2 Meta OOF: 0.8423
+- **Public LB: 0.8472** (было 0.8445, **+0.0027**, новый рекорд!)
+- Топ улучшения L1: target_2_7 +0.028, target_2_3 +0.023, target_5_2 +0.019, target_3_3 +0.018
+- Слабые таргеты (9_3, 9_6) улучшились мало — Optuna на 100k не перенеслась на 750k для них
+- Артефакты: `xgb_oof_optuna.npy`, `xgb_test_optuna.npy`, `xgb_best_features_optuna.json`, `submission_optuna_stacking.parquet`
+- Время: OOF 135 мин + full train 22 мин (A100)
+- Вывод: **Optuna подтверждена на LB.** Основной прирост от средних/редких таргетов, слабые (9_3, 9_6) нуждаются в Optuna на большей выборке (200-300k).
+
+## Тест: confidence/consensus мета-фичи | 2026-02-26
+- Описание: добавили std(OOF) и mean(OOF) как 2 доп. фичи для L2 мета-модели (43 фичи вместо 41)
+- Результат: **+0.0003** — пренебрежимо
+- Вывод: L2 depth=2 сама выводит эту информацию из 41 фичи. Закрыто.
+
+## Тест: LGB DART без feature selection | 2026-02-26
+- Описание: LightGBM DART (200 rounds, CPU) без per-target feature selection + XGBoost OOF → стекинг на 82 мета-фичах
+- OOF AUC: XGB 0.835 + LGB 0.737 → стекинг
+- **Public LB: 0.8434** (было 0.8445 — стало ХУЖЕ)
+- Вывод: **слабый L1 вредит стекингу.** Без feature selection LGB = 0.737, портит мета-модель. Для реального разнообразия LGB нужен СВОЙ feature selection. Закрыто в текущем виде.
+
 ## EXP-010 | 2026-02-25 | CatBoost OOF + стекинг 82 мета-фичи
 - Описание: добавили CatBoost OOF (750k, 5-fold, 500 iter) как второй L1. Мета-фичи: 41 XGB + 41 CB = 82. L2 тот же XGBoost depth=2, 100 iter.
 - Параметры: CatBoost depth=6, lr=0.05, GPU, Logloss, bootstrap=Bernoulli, subsample=0.8, border_count=64, early_stopping=50
