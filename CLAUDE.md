@@ -17,7 +17,19 @@ data_fusion/
 │   │   └── test_extra_features.parquet   # Доп. признаки test (320MB)
 │   └── processed/           # Обработанные фичи, сплиты, кэши
 ├── notebooks/               # EDA и эксперименты (Jupyter)
-├── baseline/                # sample_submit.parquet (43.9MB) + baseline_catboost.ipynb (231KB)
+│   ├── exp011_optuna/       # EXP-011: Optuna + стекинг (LB 0.8472, лучший)
+│   │   ├── exp011_optuna_stacking.ipynb  # Полный пайплайн
+│   │   └── artifacts/       # Артефакты с Colab (npy, json, parquet)
+│   ├── exp009_stacking.ipynb             # EXP-009: стекинг (LB 0.8444)
+│   └── ...                  # Другие ноутбуки
+├── insights/                # Документация, инсайты, журнал экспериментов
+│   ├── EXPERIMENTS.md       # Журнал экспериментов EXP-001..011
+│   ├── PIPELINE_EXP009.txt  # ASCII-схема пайплайна
+│   ├── MEMORY.md            # Общее состояние проекта и roadmap
+│   ├── baseline_insights.md # Все инсайты, параметры, артефакты
+│   ├── kaggle_insights.md   # Техники из Kaggle-соревнований
+│   └── hackathon_details.md # Описание хакатона
+├── baseline/                # sample_submit.parquet + baseline_catboost.ipynb (не трогаем)
 ├── submissions/             # Готовые сабмиты .parquet
 ├── src/                     # Пайплайны, утилиты, скрипты .py
 └── trec_cybershelf/         # (legacy)
@@ -37,8 +49,8 @@ data_fusion/
 - Код пишем чистый, но без overengineering — это соревнование, не продакшн
 - Ноутбуки для EDA и экспериментов, .py скрипты для пайплайнов
 - Все инсайты и находки фиксировать в памяти
-- Каждый эксперимент записывать в `EXPERIMENTS.md` (формат EXP-XXX, новые сверху)
-- Проверенные инсайты выносить из EXPERIMENTS.md в `memory/`
+- Каждый эксперимент записывать в `insights/EXPERIMENTS.md` (формат EXP-XXX, новые сверху)
+- Проверенные инсайты выносить в `insights/` и `memory/`
 
 ## Правила работы с пользователем
 - **Код пишем по одной ячейке** — не скидывать всё сразу, ячейка за ячейкой
