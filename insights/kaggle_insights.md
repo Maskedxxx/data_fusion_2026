@@ -99,7 +99,8 @@
 
 ## Ключевой вывод
 
-Текущий лучший: per-target XGBoost + Optuna + L2 XGB/NN бленд = **LB 0.8510**. Pseudo Labeling подтверждён (OOF +0.0036). Следующие шаги:
-1. Расширенная Optuna (200-300k, colsample 0.05-0.9) — подтянуть слабые таргеты
-2. FS порог 85% (подтверждён +0.0024) + NaN PCA(20) фичи (подтверждён +0.0017)
-3. Разнообразие L1 (CatBoost/LGB со СВОИМ feature selection) — но только если OOF > 0.80
+Текущий лучший: **3-model L1 + L2 XGB Optuna + NN v3 = LB 0.8522**. Следующие шаги:
+1. NN: dropout 0.40-0.45, hidden 1024, 80-100 epochs
+2. Seed ensemble (3-5 seed, усреднить OOF) → +0.001-0.003
+3. Hill Climbing для per-target blend weights
+4. Forward Selection OOF

@@ -1,10 +1,10 @@
 # Инсайты и прогресс экспериментов
 
 ## Лучший результат
-- **Public LB: 0.8510** (EXP-012b: PyTorch L2 skip connection + XGBoost L2 бленд)
-- **Лучший L1 OOF: 0.8442** (EXP-013: Pseudo Labeling, 750k+250k pseudo, 5-fold)
-- **Лучший L2 Meta OOF: 0.8445** (EXP-013)
-- **EXP-013 ЗАКРЫТ**: Pseudo Labeling, все 3 варианта хуже (0.8500/0.8490/0.8496)
+- **Public LB: 0.8522** (EXP-014: 3-model L1 + L2 XGB Optuna + NN v3 blend 60/40)
+- **OOF Macro AUC: 0.8482** (blend L2 XGB 0.8457 + NN v3 0.8415)
+- **L1 OOF**: XGB=0.8404, CB=0.8295, LGB=0.8272 (3-model, 750k 5-fold)
+- **EXP-013 ЗАКРЫТ**: Pseudo Labeling, все 3 варианта хуже
 
 ## Пайплайн (общий)
 1. Загрузка main (199) + extra (2241) → join по customer_id = 2440 признаков
@@ -49,6 +49,8 @@
 | 013 | Pseudo Labeling + K-Fold test | OOF 0.8442, Meta 0.8447 | **0.8496** (хуже!) |
 | — | Pseudo v1 (circular dep) | — | 0.8500 (хуже!) |
 | — | Pseudo v2 (mismatch) | — | 0.8490 (хуже!) |
+| 014 | **3-model L1 + L2 XGB + NN v2** | OOF 0.8479 | **0.8515** (+0.0005) |
+| 014v3 | **L2 NN v3 (60 ep) + blend 60/40** | OOF 0.8482 | **0.8522** (+0.0007, рекорд!) |
 
 ## Что сработало
 - **~~Pseudo Labeling~~**: OOF +0.0036, но LB 0.8496 (хуже 0.8510). Закрыто — шумные метки не генерализуются.

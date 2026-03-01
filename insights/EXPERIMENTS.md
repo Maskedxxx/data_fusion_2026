@@ -11,6 +11,81 @@
 
 ---
 
+## EXP-014 | 2026-03-01 | 3-Model L1 Stacking + NN v3 (рекорд)
+- **Описание**: Полный пайплайн с 3 GBDT моделями на L1, Optuna L2 XGB + NN v3 бленд
+- **Public LB: 0.8522** (было 0.8510, **+0.0012**, рекорд!)
+- OOF Macro AUC: 0.8482
+
+### Эволюция NN в рамках EXP-014:
+| Версия | Epochs | Patience | OOF AUC | best_ep | LB (blend 60/40) |
+|--------|--------|----------|---------|---------|-------------------|
+| v1     | 30     | 10       | 0.8202  | 7-10    | 0.8502 (90/10)    |
+| v2     | 30     | 10       | 0.8414  | 27-29   | **0.8515**        |
+| **v3** | **60** | **15**   | **0.8415** | **44-50** | **0.8522**    |
+
+- v1→v2: исправлена архитектура (LayerNorm, StandardScaler, lr=0.001) → +0.0212
+- v2→v3: увеличены epochs 30→60, patience 10→15 → OOF +0.0001, **LB +0.0007**
+- v3 модель НЕ переобучилась: best_ep=44-50, stopped=59-60 (patience не сработал в 4/5 фолдов)
+- **Инсайт**: OOF почти не растёт (+0.0001), но LB растёт (+0.0007) — NN дотренировала хвосты распределения
+
+### Архитектура от начала до конца:
+```
+Step 0.5: Per-target Optuna (params + FS 85% для 3 моделей)
+├── XGBoost v2: 200k, 3-fold, 30 trials, mean AUC 0.8278 (31-534 фичи/таргет)
+├── CatBoost:   200k, 3-fold, 30 trials, mean AUC 0.8211 (25-194 фичи/таргет)
+└── LightGBM:   100k, 3-fold, 20 trials, mean AUC 0.8080 (9-631 фичи/таргет)
+
+Step 1: L1 OOF (750k, 5-fold, 397 мин)
+├── XGBoost GPU: device='cuda', 2000 rounds, early_stop=50 → OOF 0.8404
+├── CatBoost GPU: task_type='GPU', 2000 iter, early_stop=50 → OOF 0.8295
+├── LightGBM CPU: n_jobs=-1, 2000 rounds, early_stop=50  → OOF 0.8272
+└── Артефакты: oof_*.npy (750k×41) × 3 + test_*.npy (250k×41) × 3
+
+Step 2a: L2 XGBoost (per-target Optuna, 15 trials, 141 мин)
+├── Вход: 123 OOF + 82 мета (mean/std по 3 моделям) = 205 фичей
+├── Search space: depth 2-4, colsample 0.1-0.6, lr 0.01-0.3, lambda 0.1-50
+├── OOF Macro AUC: 0.8457
+└── Типичные params: depth=4, lr=0.03, colsample=0.15-0.35
+
+Step 2b: L2 NN v3 (LayerNorm + StandardScaler, 45 мин)
+├── Архитектура: 205→512→256→128→41 (3 блока + residual)
+│   └── LayerNorm (не BN!), SiLU, Dropout 0.30/0.25/0.20
+│   └── Residual: skip_proj(block1) → block2 (scaled 0.5)
+├── Вход: StandardScaler(OOF) — НЕ logit! (logit range [-1.89, 283.76])
+├── Training: AdamW lr=0.001, OneCycleLR, batch=512, 60 epochs, patience=15
+│   └── Gradient clipping max_norm=1.0, BCEWithLogitsLoss (без label smoothing)
+├── Per-fold: best_ep=50/47/44/47/45, stopped=60/60/59/60/60
+├── Per-fold AUC: 0.8426/0.8400/0.8440/0.8416/0.8408
+└── OOF Macro AUC: 0.8415
+
+Final: Бленд 60% XGB L2 + 40% NN L2 v3
+├── OOF Macro AUC: 0.8482
+└── Public LB: 0.8522
+```
+
+### Ключевые инсайты NN (из Kaggle ресёрча, подтверждены):
+- **LayerNorm вместо BatchNorm**: BN нестабилен с tabular + StandardScaler
+- **StandardScaler вместо logit**: logit на 205 фичах создаёт range [-14, 283] → saturation
+- **lr=0.001 вместо 0.025**: lr=0.025 переобучал за 7-10 эпох (Optuna подтвердила lr=0.0017)
+- **batch=512 вместо 4096**: больше обновлений за эпоху → стабильнее learning
+- **Без label smoothing на L2**: OOF уже "гладкие" вероятности
+- **Residual между hidden слоями**: вместо concat input (мисматч масштабов)
+- **60 epochs > 30**: модель продолжает учиться до ep 44-50 (v2 останавливалась на 27-29)
+- **OOF ≈ LB при больших epochs**: v3 OOF +0.0001, но LB +0.0007 — хвосты предсказаний дотачиваются
+
+### Диагностика L2 переобучения:
+- L2 XGB (205 фичей): OOF 0.8457 → LB 0.8502 (gap 0.005)
+- L2 XGB (123 OOF): OOF 0.8447 → LB 0.8496
+- L2 XGB (41 XGB OOF): OOF 0.8427
+- CB/LGB OOF помогают (+0.002 на OOF), мета-фичи тоже (+0.001)
+- Бленд с NN v3: OOF 0.8482 → LB 0.8522 (gap 0.0040)
+
+### Неудачные попытки в рамках EXP-014:
+- NN v1 (старые params от EXP-012b): OOF 0.8202 — lr=0.025 на 205 фичах = катастрофа
+- Бленд 90/10 XGB+NN v1: LB 0.8502 (хуже 0.8510)
+- XGB L2 alone (без NN): LB 0.8502 (хуже 0.8510)
+- XGB L2 123 OOF (без мета): LB 0.8496 (хуже)
+
 ## EXP-013 | 2026-02-27 | Pseudo Labeling + K-Fold Test Inference
 - Описание: добавили Pseudo Labeling (soft labels из LB 0.8510 сабмита) к выигрышному пайплайну EXP-011
 - L1 OOF: 5-fold, каждый fold train = 600k real + 250k pseudo test → OOF **0.8442** (было 0.8407, **+0.0036**)
