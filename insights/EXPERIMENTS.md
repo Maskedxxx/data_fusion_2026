@@ -11,35 +11,48 @@
 
 ---
 
-## EXP-015 | 2026-03-01 | NN v4 RankGauss + 3-way blend
-- **Описание**: NN v4 с RankGauss (QuantileTransformer) вместо StandardScaler + Input Dropout 0.10
-- **Базируется на**: EXP-014 (те же L1 OOF + L2 XGB)
-- **Public LB: 0.8522** (паритет с EXP-014)
-- OOF Macro AUC: 0.8487 (3-way blend, vs 0.8482 baseline, **+0.0005**)
+## EXP-015 | 2026-03-01 | NN фабрика + Hill Climbing (рекорд!)
+- **Описание**: "Фабрика NN" — 3 версии NN L2 с разной архитектурой/скалером → N-way blend → Hill Climbing per-target
+- **Базируется на**: EXP-014 (L1 OOF + L2 XGB остаются якорем)
+- **Public LB: 0.8527** (было 0.8522, **+0.0005**, новый рекорд!)
+- OOF Macro AUC: **0.8493** (Hill Climbing), vs 0.8482 baseline (**+0.0012**)
 
-### Результаты NN v4:
-| Метрика | v3 (StandardScaler) | v4 (RankGauss) | Diff |
-|---------|---------------------|----------------|------|
-| NN OOF  | 0.8415              | **0.8426**     | **+0.0011** |
-| Per-fold| 0.8426/0.8400/0.8440/0.8416/0.8408 | 0.8429/0.8414/0.8447/0.8426/0.8425 | все лучше |
-| 2-way blend 60/40 | 0.8482     | 0.8482         | +0.0001 |
-| **3-way blend** | —           | **0.8487**     | **+0.0005** |
+### Эволюция NN L2:
+| Версия | Архитектура | Scaler | Dropout | OOF | Что дало |
+|--------|------------|--------|---------|-----|----------|
+| v3 | 512→256→128 | StandardScaler | 0.30/0.25/0.20 | 0.8415 | baseline |
+| v4 | 512→256→128 | **RankGauss** | 0.30/0.25/0.20 + InputDrop 0.10 | **0.8426** | +0.0011 |
+| v5 SWA | v4 + SWA | RankGauss | 0.30/0.25/0.20 | 0.8421 | **ПРОВАЛ** |
+| **v6** | **1024→512→256** | **RankGauss** | **0.40/0.35/0.30** + InputDrop 0.10 | **0.8440** | **+0.0025** |
 
-- **Лучший бленд**: XGB=0.55, v3=0.20, v4=0.25
-- RankGauss range: [-5.20, 5.20] vs StandardScaler [-1.89, 283.76]
-- v4 лучше v3 в 32/41 таргетах, хуже в 9/41
-- Единственный крупный провал: target_2_8 (-0.0100)
+### Бленды:
+| Бленд | OOF | LB | Diff vs baseline |
+|-------|-----|----|-----------------|
+| 2-way XGB 60% + v3 40% (baseline) | 0.8482 | 0.8522 | — |
+| 3-way XGB 55% + v3 20% + v4 25% | 0.8487 | 0.8522 | +0.0005 OOF |
+| 4-way fixed XGB=0.50 v3=0.15 v4=0.05 v6=0.30 | 0.8490 | — | +0.0008 OOF |
+| **Hill Climbing per-target** (XGB+v3+v4+v6) | **0.8493** | **0.8527** | **+0.0012 OOF** |
 
-### Ключевые инсайты:
-- **RankGauss > StandardScaler** для NN на L2 OOF (+0.0011 OOF)
-- **3-way blend > 2-way**: v3 и v4 обучены на разных скалерах → разные ошибки → diversity
-- 2-way бленд XGB+v4 НЕ лучше XGB+v3 — NN стала точнее, но менее diverse
-- LB = 0.8522 (паритет): OOF прирост +0.0005 не перешёл в LB
+### Hill Climbing результаты:
+- Доминантная модель: XGB в 38/41, v6 в 3/41
+- Средние веса: xgb=0.47, v3=0.20, v4=0.08, v6=0.25
+- v3 держит 20% вес несмотря на худший OOF — diversity от StandardScaler ценна!
+- v4 всего 8% — слишком похожа на v6 (обе RankGauss, мало diversity)
+
+### Ключевые инсайты (подтверждены LB):
+1. **RankGauss > StandardScaler** — range [-5.20, 5.20] vs [-1.89, 283.76]
+2. **Wider + Higher Dropout** — 1024→512→256 с drop 0.40 >> 512→256→128 с drop 0.30
+3. **"Фабрика NN"** — разные архитектуры/скалеры дают diversity → бленд сильнее
+4. **Hill Climbing per-target** — свои веса на каждый таргет дают +0.0003 vs fixed blend
+5. **SWA НЕ работает** на нашей задаче (OOF 0.8421 < v4 0.8426)
+6. **Diversity важнее accuracy**: v3 (слабейшая) получает 20% за счёт разного скалера
 
 ### Артефакты:
-- `l2_stacking/oof_l2_nn_v4.npy` (750k, 41)
-- `l2_stacking/test_l2_nn_v4.npy` (250k, 41)
-- `submission_exp015_3way_blend.parquet`
+- `l2_stacking/oof_l2_nn_v4.npy`, `test_l2_nn_v4.npy` — NN v4 (RankGauss)
+- `l2_stacking/oof_l2_nn_v6.npy`, `test_l2_nn_v6.npy` — NN v6 (Wider)
+- `l2_stacking/hill_climb_weights.json` — per-target веса для 4-way blend
+- `submission_exp015_3way_blend.parquet` — 3-way LB 0.8522
+- `submission_exp015_hill_climb.parquet` — Hill Climbing **LB 0.8527** (рекорд)
 - Ноутбук: `notebooks/exp015_nn_boost/exp015_nn_boost.ipynb`
 
 ---

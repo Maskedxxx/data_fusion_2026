@@ -99,8 +99,19 @@
 
 ## Ключевой вывод
 
-Текущий лучший: **3-model L1 + L2 XGB Optuna + NN v3 = LB 0.8522**. Следующие шаги:
-1. NN: dropout 0.40-0.45, hidden 1024, 80-100 epochs
-2. Seed ensemble (3-5 seed, усреднить OOF) → +0.001-0.003
-3. Hill Climbing для per-target blend weights
-4. Forward Selection OOF
+Текущий лучший: **LB 0.8527** (EXP-015: "фабрика NN" + Hill Climbing per-target).
+
+### Что сработало (EXP-015, подтверждено LB):
+- ✅ NN wider 1024→512→256 + dropout 0.40 → OOF 0.8440 (+0.0025 vs v3)
+- ✅ RankGauss вместо StandardScaler → +0.0011 OOF
+- ✅ Hill Climbing per-target weights → +0.0003 vs fixed blend
+- ✅ "Фабрика NN" (разные архитектуры/скалеры) → diversity в бленде
+
+### Что НЕ сработало:
+- ✗ SWA (Stochastic Weight Averaging) — OOF 0.8421 < v4 0.8426
+
+### Следующие шаги:
+1. TabM BatchEnsemble (k=16 голов) → ещё одна diverse NN
+2. Ещё NN вариации (другой seed, другой dropout) → расширить фабрику
+3. Forward Selection OOF
+4. 80-100 epochs для v6
