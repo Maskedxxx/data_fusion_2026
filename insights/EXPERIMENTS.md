@@ -11,6 +11,39 @@
 
 ---
 
+## EXP-015 | 2026-03-01 | NN v4 RankGauss + 3-way blend
+- **Описание**: NN v4 с RankGauss (QuantileTransformer) вместо StandardScaler + Input Dropout 0.10
+- **Базируется на**: EXP-014 (те же L1 OOF + L2 XGB)
+- **Public LB: 0.8522** (паритет с EXP-014)
+- OOF Macro AUC: 0.8487 (3-way blend, vs 0.8482 baseline, **+0.0005**)
+
+### Результаты NN v4:
+| Метрика | v3 (StandardScaler) | v4 (RankGauss) | Diff |
+|---------|---------------------|----------------|------|
+| NN OOF  | 0.8415              | **0.8426**     | **+0.0011** |
+| Per-fold| 0.8426/0.8400/0.8440/0.8416/0.8408 | 0.8429/0.8414/0.8447/0.8426/0.8425 | все лучше |
+| 2-way blend 60/40 | 0.8482     | 0.8482         | +0.0001 |
+| **3-way blend** | —           | **0.8487**     | **+0.0005** |
+
+- **Лучший бленд**: XGB=0.55, v3=0.20, v4=0.25
+- RankGauss range: [-5.20, 5.20] vs StandardScaler [-1.89, 283.76]
+- v4 лучше v3 в 32/41 таргетах, хуже в 9/41
+- Единственный крупный провал: target_2_8 (-0.0100)
+
+### Ключевые инсайты:
+- **RankGauss > StandardScaler** для NN на L2 OOF (+0.0011 OOF)
+- **3-way blend > 2-way**: v3 и v4 обучены на разных скалерах → разные ошибки → diversity
+- 2-way бленд XGB+v4 НЕ лучше XGB+v3 — NN стала точнее, но менее diverse
+- LB = 0.8522 (паритет): OOF прирост +0.0005 не перешёл в LB
+
+### Артефакты:
+- `l2_stacking/oof_l2_nn_v4.npy` (750k, 41)
+- `l2_stacking/test_l2_nn_v4.npy` (250k, 41)
+- `submission_exp015_3way_blend.parquet`
+- Ноутбук: `notebooks/exp015_nn_boost/exp015_nn_boost.ipynb`
+
+---
+
 ## EXP-014 | 2026-03-01 | 3-Model L1 Stacking + NN v3 (рекорд)
 - **Описание**: Полный пайплайн с 3 GBDT моделями на L1, Optuna L2 XGB + NN v3 бленд
 - **Public LB: 0.8522** (было 0.8510, **+0.0012**, рекорд!)
