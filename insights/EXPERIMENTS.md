@@ -11,6 +11,75 @@
 
 ---
 
+## EXP-013 | 2026-02-27 | Pseudo Labeling + K-Fold Test Inference
+- Описание: добавили Pseudo Labeling (soft labels из LB 0.8510 сабмита) к выигрышному пайплайну EXP-011
+- L1 OOF: 5-fold, каждый fold train = 600k real + 250k pseudo test → OOF **0.8442** (было 0.8407, **+0.0036**)
+- Топ улучшения: target_2_7 +0.026, target_2_5 +0.020, target_2_3 +0.008
+- L2 Meta OOF: **0.8445** (было 0.8423, +0.0022)
+- **ПРОБЛЕМА v1**: full train на 750k+250k pseudo → predict на тех же 250k → circular dependency → LB 0.8500 (ХУЖЕ 0.8510)
+- **ПРОБЛЕМА v2**: OOF pseudo + old test → distribution mismatch → LB 0.8490 (ЕЩЁ ХУЖЕ)
+- **РЕШЕНИЕ v3**: K-Fold Pseudo для test — разбить 250k test на 5 фолдов, каждый предсказан моделью которая НЕ видела его фичи (NVIDIA Playbook).
+- **LB v3: 0.8496** — ХУЖЕ 0.8510! K-Fold не спас. Pseudo Labeling раздувает OOF но не генерализуется на LB.
+- **ЗАКРЫТО.** Причина: soft labels из модели 0.8510 содержат ~15% ошибок. Модель учит шум как сигнал → OOF растёт (confirmation bias), LB падает.
+- Артефакты: `xgb_oof_pseudo.npy`, `xgb_test_pseudo_kfold.npy`
+
+## Комплексные A/B тесты | 2026-02-27
+- Условия: 100k, 3-fold, 4-6 таргетов (8_1, 2_3, 9_3, 9_6 + иногда 2_5, 3_2)
+
+### Тест 1: NaN-фичи
+- NaN indicators (бинарные isnan): avg +0.0003 — шум
+- NaN groups (сумма NaN по группам): avg -0.0002 — шум
+- fill_value=-999: avg +0.001 — нестабильно (1/4 negative)
+- **Вывод: XGBoost нативно обрабатывает NaN, дополнительные фичи не помогают**
+
+### Тест 2: colsample_bytree
+- 0.80 (default): baseline
+- 0.30: avg +0.001
+- **0.10: avg +0.003** ← лучший
+- 0.05: avg +0.002
+- **Вывод: при 2440 фичах агрессивный sampling помогает. Optuna должна искать 0.05-0.9**
+
+### Тест 3: FS threshold (cumulative gain)
+- 95% (текущий): baseline (avg 619 фичей)
+- 90%: avg +0.0014
+- **85%: avg +0.0024** ← лучший (avg 494 фичи)
+- 80%: avg +0.0010
+- **Вывод: 85% порог = меньше фичей = сильнее регуляризация = +0.0024**
+
+### Тест 4: Sigmoid пост-обработка
+- p^(1/(1+α)) — монотонная трансформация → **не меняет ROC-AUC по определению**
+- **Вывод: тест некорректный, закрыто**
+
+### Тест 5: Кластеризация / PCA-фичи
+- NaN PCA(20) на всех фичах: avg +0.0017, **4/4 positive** ← лучший
+- NaN_extra PCA(10): avg +0.00163, 3/4 positive
+- Val_extra PCA(10): avg +0.00129, 3/4 positive
+- NaN_main PCA(10): avg +0.00096, 3/4 positive
+- NaN_both(20) (10 main + 10 extra): avg +0.00089, 4/4 positive
+- Val_main PCA(10): avg +0.00014, 2/4 positive — слабо
+- All(40): avg -0.00216 — переобучение
+- **Вывод: NaN PCA(20) — лучший вариант. Extra-фичи (2241, NaN до 99.9%) несут больше NaN-сигнала**
+
+### Тест 6: Mixup (расширенный, 6 таргетов)
+- POC на 1 таргете показал +0.005, но расширенный тест: 1/6 positive, avg -0.001
+- **Вывод: ложноположительный POC, закрыто**
+
+## Тесты Pseudo Labeling / Mixup / Синтетика | 2026-02-27
+- **Pseudo Labeling POC** (100k+33k): target_8_1 +0.0006, target_9_6 **+0.006** — подтверждён
+- **Mixup POC** (100k, target_9_6): **+0.005** — но на 1 таргете, рискованно
+- **nan_count фича** (100k): +0.000275 — шум, XGBoost и так видит NaN-паттерны
+- **Мета-синтетика L2** (sum/std/max OOF): +0.000018 ~ +0.002 — = старый тест confidence
+- **DAE latent features** (100k): +0.000026 — ноль
+- **NN L1 на сырых фичах** (100k, union 1773 фичей): OOF 0.69 vs XGB 0.80 — тупик
+
+## EXP-012b | 2026-02-27 | Optuna для PyTorch L2 + Skip Connection
+- Описание: Optuna-тюнинг архитектуры PyTorch L2. Добавлен skip connection (конкатенация входа с hidden → classifier). Optuna нашёл: hidden=512, drop1=0.19, drop2=0.22, lr=0.02558, wd=1.16e-5
+- Архитектура: Linear(41→512)→BN→SiLU→Drop(0.19)→Linear(512→256)→BN→SiLU→Drop(0.22)→Linear(256+41→41)
+- Параметры: AdamW lr=0.002558, OneCycleLR max_lr=0.02558, weight_decay=1.157e-5, batch=4096, 100 эпох
+- Full train на 750k (без fold CV), бленд 60% XGB L2 + 40% NN L2
+- **Public LB: 0.8510** (было 0.8505, **+0.0005**, новый рекорд!)
+- Вывод: skip connection + Optuna-тюнинг дали скромный, но подтверждённый буст. Потолок NN L2 близок.
+
 ## EXP-012 | 2026-02-27 | PyTorch L2 бленд с XGBoost стекингом
 - Описание: обучили PyTorch Multi-Task NN как вторую L2 мета-модель на logit-трансформированных OOF (750k, 41). Архитектура: Linear(41→256)→BN→SiLU→Drop(0.3)→Linear(256→128)→BN→SiLU→Drop(0.2)→Linear(128→41). Бленд 60% XGBoost L2 + 40% PyTorch L2.
 - Параметры: AdamW lr=3e-3, weight_decay=1e-4, OneCycleLR max_lr=1e-2, batch=4096, 100 эпох

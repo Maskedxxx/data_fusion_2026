@@ -1,9 +1,10 @@
 # Инсайты и прогресс экспериментов
 
 ## Лучший результат
-- **Public LB: 0.8505** (EXP-012: PyTorch L2 бленд + XGBoost стекинг)
-- **Лучший OOF: 0.8407** (EXP-011: Optuna per-target, 750k, 5-fold)
-- **Лучший L2 бленд OOF: 0.8449** (50/50 L1 XGB + L2 NN)
+- **Public LB: 0.8510** (EXP-012b: PyTorch L2 skip connection + XGBoost L2 бленд)
+- **Лучший L1 OOF: 0.8442** (EXP-013: Pseudo Labeling, 750k+250k pseudo, 5-fold)
+- **Лучший L2 Meta OOF: 0.8445** (EXP-013)
+- **EXP-013 ЗАКРЫТ**: Pseudo Labeling, все 3 варианта хуже (0.8500/0.8490/0.8496)
 
 ## Пайплайн (общий)
 1. Загрузка main (199) + extra (2241) → join по customer_id = 2440 признаков
@@ -44,9 +45,15 @@
 | — | LGB DART без FS + стекинг | OOF 0.737 | 0.8434 (хуже!) |
 | 011 | **Optuna params + стекинг** | OOF 0.8407, Meta 0.8423 | **0.8472** (+0.0027) |
 | 012 | **PyTorch L2 бленд (60/40)** | NN OOF 0.8382, бленд 0.8449 | **0.8505** (+0.0033) |
+| 012b | **PyTorch L2 + skip connection (Optuna)** | бленд 60/40 | **0.8510** (+0.0005) |
+| 013 | Pseudo Labeling + K-Fold test | OOF 0.8442, Meta 0.8447 | **0.8496** (хуже!) |
+| — | Pseudo v1 (circular dep) | — | 0.8500 (хуже!) |
+| — | Pseudo v2 (mismatch) | — | 0.8490 (хуже!) |
 
 ## Что сработало
+- **~~Pseudo Labeling~~**: OOF +0.0036, но LB 0.8496 (хуже 0.8510). Закрыто — шумные метки не генерализуются.
 - **PyTorch L2 бленд с XGB L2**: +0.0033 LB (0.8472→0.8505). NN на logit(OOF), Multi-Task, бленд 60/40
+- **Skip connection + Optuna для NN L2**: +0.0005 LB (0.8505→0.8510). Архитектура 41→512→256+41→41
 - **Logit-трансформация OOF для NN**: log(p/(1-p)) нормализует вход, NN видит линейные комбинации которые деревья пропускают
 - **Стекинг OOF**: +0.012 macro AUC. Слабые таргеты взлетели: target_5_2 +0.081, target_2_5 +0.071
 - **Per-target Optuna**: +0.0027 LB (EXP-011)
@@ -54,15 +61,31 @@
 - **XGBoost доминирует**: на каждом таргете лучше CatBoost и LightGBM
 - **Extra features**: +0.013 LB (EXP-003)
 
+## Подтверждённые инсайты из A/B тестов (100k, 3-fold, 4-6 таргетов)
+- **FS порог 85%** вместо 95%: avg +0.0024, 3/4 positive. Меньше фичей = сильнее регуляризация
+- **colsample_bytree=0.10**: avg +0.003 vs default 0.80. Optuna должна искать 0.05-0.9
+- **NaN PCA(20)** на всех фичах: avg +0.0017, 4/4 positive. PCA на бинарной NaN-матрице ловит сегменты клиентов
+- **NaN PCA Extra(10)**: avg +0.00163, 3/4 positive. Extra-фичи несут больше NaN-сигнала чем Main
+
 ## Что НЕ сработало
 - **FE (EXP-005)**: null_count, mean, std, cat_freq — CatBoost справляется нативно
 - **scale_pos_weight (EXP-008)**: ROC-AUC ранговая метрика, spw ломает ранжирование (-0.012)
 - **Full train ×1.2**: слишком консервативный множитель (+0.0003)
 - **PyTorch MLP бленд**: NN на 100k/15 эпох слишком слабая, портит бленд (0.8432/0.8427 vs 0.8444)
 - **CatBoost OOF с фичами XGBoost (EXP-010)**: предсказания слишком коррелированы → +0.00002 на LB
-- **confidence/consensus мета-фичи**: std(OOF) и mean(OOF) как L2 фичи = +0.0003. L2 depth=2 сама выводит эту информацию
-- **LGB DART без feature selection**: OOF AUC 0.737 (vs XGB 0.835). Слабый L1 ВРЕДИТ стекингу: LB упал с 0.8445 до 0.8434
-- **Чужой пайплайн без feature selection**: OOF 0.773 → LB 0.779. Feature selection = обязательна
+- **confidence/consensus мета-фичи**: std(OOF) и mean(OOF) как L2 фичи = +0.0003
+- **LGB DART без feature selection**: OOF 0.737, стекинг упал 0.8445→0.8434
+- **CatBoost per-target (Gemini)**: AUC 0.64 vs XGB 0.78
+- **NN L1 на сырых фичах**: OOF 0.69 vs XGB 0.80 (NaN handling)
+- **Mixup**: POC +0.005 на 1 таргете, расширенный тест 1/6 positive, avg -0.001
+- **nan_count фича**: +0.000275 — шум
+- **DAE latent features**: +0.000026 — ноль
+- **Мета-синтетика L2**: sum/std/max OOF = +0.00002
+- **Multi-seed NN бленд**: 0.8446 vs 0.8449 single — хуже
+- **Sigmoid пост-обработка**: монотонная трансформация не меняет AUC
+- **NaN indicators/groups**: шум, fill -999 нестабильно
+- **All(40) PCA**: переобучение, avg -0.00216
+- **Чужой пайплайн без feature selection**: OOF 0.773 → LB 0.779
 
 ## Optuna Per-Target (завершена 2026-02-26)
 
@@ -164,7 +187,7 @@
 - Артефакты (Colab Drive): `xgb_oof_750k.npy` (750k, 41), `xgb_best_features.json`
 - Артефакты скопированы на Spark: `data/raw/xgb_best_features.json`
 
-### EXP-011: Optuna + стекинг (LB 0.8472, текущий лучший)
+### EXP-011: Optuna + стекинг (LB 0.8472)
 - Ноутбук: `notebooks/exp011_optuna/exp011_optuna_stacking.ipynb`
 - Артефакты: `notebooks/exp011_optuna/artifacts/`
 - OOF: `xgb_oof_optuna.npy` (750k, 41), фичей на таргет: 176-1243
@@ -172,39 +195,36 @@
 - Params: `optuna_best_params.json`, Features: `xgb_best_features_optuna.json`
 - Сабмит: `submission_optuna_stacking.parquet`
 
+### EXP-012b: PyTorch L2 + skip connection (LB 0.8510, текущий лучший)
+- Ноутбук: `notebooks/exp012_nn_blend/exp012_nn_blend.ipynb`
+- Архитектура: Linear(41→512)→BN→SiLU→Drop(0.19)→Linear(512→256)→BN→SiLU→Drop(0.22)→[concat input]→Linear(297→41)
+- Бленд: 60% XGB L2 + 40% NN L2
+
+### EXP-013: Pseudo Labeling + K-Fold test (в процессе)
+- Soft labels из LB 0.8510 сабмита для 250k test
+- L1 OOF: 0.8442 (+0.0036), L2 Meta OOF: 0.8445
+- K-Fold: test разбит на 5 фолдов, каждый предсказан моделью без его фичей
+
 ### Мета-модель учит связи между таргетами
 - Корреляции групп 3-7, антагонист target_10_1
 - **Решает проблему дисбаланса**: редкие таргеты получают сигнал от частых связанных
 
-## Roadmap v4 (цель: 0.86, нужно +0.013)
+## Roadmap v6 (цель: 0.86, нужно +0.009)
 
-| # | Гипотеза | Оценка прироста | Статус |
-|---|----------|-----------------|--------|
-| 1 | **Optuna на 200-300k** — подтянуть слабые таргеты (9_3, 9_6, 10_1) | +0.003-0.005 | Ожидает |
-| 2 | **Pseudo Labeling** — soft labels 250k test → train 1M | +0.003-0.005 | Ожидает |
-| 3 | **CatBoost со своим feature selection** — реальное разнообразие L1 | +0.003-0.005 | Ожидает |
-| 4 | **Denoising Autoencoder** — unsupervised фичи из train+test | +0.002-0.005 | Ожидает |
-| 5 | **Адаптивный порог FS** (85-90% вместо 95%) | +0.001-0.003 | Ожидает |
-| 6 | **Пост-обработка target_10_1** (sigmoid alpha=0.4) | +0.0003-0.0007 | Проверено на OOF |
+### В процессе
+- **EXP-013 K-Fold Pseudo test** — запущен на Colab, ~33/41 таргетов готово
 
-Провалившиеся направления (закрыты):
-- ~~EXP-011: Optuna params в EXP-009~~ — **СДЕЛАНО, LB 0.8472**
-- ~~confidence/consensus мета-фичи~~ — +0.0003, L2 depth=2 сама выводит
-- ~~LGB DART без feature selection~~ — OOF 0.737, стекинг упал до 0.8434
-- ~~CatBoost OOF с чужими фичами~~ — EXP-010, +0.00002
-- ~~PyTorch MLP бленд~~ — EXP-009b, -0.001/-0.002
-- ~~FE агрегаты, scale_pos_weight~~ — EXP-005/008
-- ~~Иерархическая пост-обработка~~ — +0.00003, L2 уже знает
+### Следующие эксперименты (по приоритету)
+1. **Расширенная Optuna** (200-300k, 5-fold, 30-50 trials, colsample 0.05-0.9)
+2. **FS порог 85%** вместо 95% — подтверждённый +0.0024
+3. **NaN PCA(20) фичи** — подтверждённый +0.0017 (4/4 positive)
+4. **Per-target blend weights** — нужен NN L2 OOF из fold CV
+5. **Пост-обработка target_10_1** — проверить что AUC реально меняется
 
-## Что уже сделано
-- ~~Базовые модели (EXP-001..004)~~ — Done
-- ~~41 отдельная модель (EXP-006, 007)~~ — Done
-- ~~Feature analysis + per-target selection~~ — Done
-- ~~Стекинг быстрый тест (100k)~~ — +0.012 подтверждён
-- ~~Стекинг полный (750k, EXP-009)~~ — **LB 0.8444**
-- ~~Optuna per-target + стекинг (EXP-011)~~ — **LB 0.8472**
-- ~~Пост-обработка target_10_1~~ — +0.0007 на OOF, проверено
-- ~~FE агрегаты, scale_pos_weight~~ — Не сработало
+### Идеи для исследования
+- Denoising Autoencoder → unsupervised фичи (Porto Seguro 1st place)
+- CatBoost/LGB со СВОИМ feature selection → разнообразие L1
+- MultilabelStratifiedKFold вместо per-target StratifiedKFold
 
 ## Пост-обработка target_10_1 (проверено на OOF)
 - target_10_1=1 → ВСЕ остальные 40 = 0 (236k клиентов, абсолютное правило)
@@ -214,11 +234,11 @@
 - Применять как финишный штрих ПОВЕРХ финального сабмита (после L2 эффект будет ~+0.0003)
 
 ## Дополнительные идеи (если будет время)
-- **Адаптивный порог feature selection** (вместо фиксированных 95%): уменьшение до 85-90% = меньше фичей, сильнее регуляризация. Пробовать в следующем экспе
-- Взаимодействия топ-фичей: num_feature_76 × num_feature_117, num_feature_69 × num_feature_35
-- PCA extra features: 2241 → 20-50 компонент (1636 из 2440 в одном кластере!)
+- Denoising Autoencoder → unsupervised фичи (Porto Seguro 1st place)
+- CatBoost/LGB со СВОИМ feature selection → разнообразие L1
+- MultilabelStratifiedKFold вместо per-target StratifiedKFold
+- Взаимодействия топ-фичей: num_feature_76 × num_feature_117
 - Anomaly score (Isolation Forest) как фича для редких таргетов
-- Focal Loss: альтернативная функция потерь
 
 ## Артефакты
 
@@ -238,7 +258,8 @@
 - `DATA/optuna_best_params.json` — Optuna параметры для 41 таргета (100k, 3-fold, 20 trials)
 
 ### Скрипты и ноутбуки
-- **`notebooks/exp011_optuna/exp011_optuna_stacking.ipynb`** — ЛУЧШИЙ пайплайн (LB 0.8472)
+- **`notebooks/exp012_nn_blend/exp012_nn_blend.ipynb`** — ЛУЧШИЙ пайплайн (LB 0.8510)
+- **`notebooks/exp011_optuna/exp011_optuna_stacking.ipynb`** — Optuna + стекинг (LB 0.8472)
 - **`notebooks/exp009_stacking.ipynb`** — стекинг (LB 0.8444)
 - `notebooks/feature_analysis.ipynb` — анализ фичей: nulls, importance, per-target selection
 - `notebooks/exp006_41models.ipynb` — 41 CatBoost (Spark)

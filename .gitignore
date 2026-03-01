@@ -38,6 +38,10 @@ Thumbs.db
 # Claude
 .claude/
 
+# Артефакты моделей (тяжёлые npy, json с параметрами)
+**/artifacts/
+*.npy
+
 # CatBoost logs
 catboost_info/
 **/catboost_info/
